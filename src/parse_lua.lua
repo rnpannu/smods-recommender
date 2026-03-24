@@ -45,6 +45,7 @@ local function find_name(node)
 		end
 		if not found then error "Not a child of my parent?" end
 		local var_list = parent:prev_named_sibling()
+		if not var_list then return end
 		return node_text(var_list:child(found))
 	elseif type == "field" then
 		local name = node_text(node:prev_named_sibling())
@@ -61,7 +62,9 @@ do
 	for id, node in query:iter_captures(tree:root(), 0, 0, -1) do
 		local start_row, _, end_row, _ = node:range()
 		local name = find_name(node)
-		table.insert(data.definitions, {line_start = start_row + 1, line_end = end_row + 1, name = name})
+		if name then
+			table.insert(data.definitions, {line_start = start_row + 1, line_end = end_row + 1, name = name})
+		end
 	end
 end
 do

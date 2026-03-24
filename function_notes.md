@@ -1,0 +1,4 @@
+- : may produce inconsistant usage
+- Whitespace should be ignored
+- strings wrapped in () should be handled differently
+- Table defintions with brackets are weird
