@@ -1,6 +1,7 @@
 import csv
 import os
 import subprocess
+import json
 
 hash: str
 author: str
@@ -33,7 +34,6 @@ else:
         diff = subprocess.run(['git', 'show', hash], cwd=target_dir, capture_output=True, text=True, check=True)
         lines_changed = []
         for row in diff.stdout.split("\n"):
-            #print(row)
             if row[0:2] == "@@":
                 header = row[0:23].strip(" ")
                 
@@ -47,4 +47,48 @@ else:
         print("Commit: " + hash, end = ". ")
         print(commits[hash])
 
+        break
+
+try:
+    funcs_json = subprocess.run(
+        ['parse_lua.lua', '../demo.lua'],
+        capture_output=True,
+        text=True,
+        check=True
+    )
+except subprocess.CalledProcessError as e:
+    print(f"Execution failed with return code {e.returncode}")
+    print(f"Error: {e.stderr}")
+
+funcs_dict = json.loads(funcs_json.stdout)
+
+# print(funcs_dict["definitions"])
+
+expertise_map = {}
+
+commits['test'] = ['Goku', 'Sun, 22 Mar 1733 22:11:35 -0300', 'goku@gmail.com', [['11', '4']]]
+
+for func in funcs_dict["definitions"]:
+    func_name = func["name"]
+    start_line = int(func["line_start"])
+    end_line = int(func["line_end"])
+
+    if func_name not in expertise_map:
+        expertise_map[func_name] = {}
+
+    for hash, data in commits.items():
+        email = data[2]
+        date = data[1] 
+        lines_changed = data[3] 
+
+        for change in lines_changed:
+            change_start = int(change[0])
+
+            if (change_start >= start_line and change_start <= end_line):
+                if email not in expertise_map[func_name]:
+                    expertise_map[func_name][email] = 1
+                else:
+                    expertise_map[func_name][email] += 1
+
+print(expertise_map)
 
