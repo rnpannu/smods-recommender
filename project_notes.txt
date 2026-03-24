@@ -1,0 +1,31 @@
+Author,
+
+Author email?
+
+Date: Age of commit
+
+key, value {function_name, # of lines modified, # of times called?}
+	- Added lines or lines changed
+		- Potentially weigh/score later
+	
+Keep track of function calls?
+	- If a person calls a function a lot they are more likely to know how it works.
+	
+		
+Can attach | to commands to feed into program.
+
+
+Go through all commits, get line changes, 
+
+Find associated functions of changes (what function body are the changes in) 
+
+Same for lovely injector patches. 
+
+Get list of recommendors
+	- Counting occurences
+	- Time decay
+	- Lovely vs main code for patches
+	- Dev scoring function
+		
+
+Get all the commits for an author. See 
