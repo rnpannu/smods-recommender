@@ -3,6 +3,8 @@ import os
 import subprocess
 import json
 import re
+import tempfile
+from pprint import pprint
 
 hash: str
 author: str
@@ -10,90 +12,118 @@ email: str
 date: str
 commits = {}
 
-target_dir = "../../smods"
-script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commit_csv.sh")
-
-logs = subprocess.run([script_path], cwd=target_dir, capture_output=True, text=True, check=True)
-
-        for line in logs.stdout.split("\n"):
-        line = line[1:len(line) - 1]
-        stuff = line.split('","')
-        hash = stuff[0]
-        author = stuff[1]
-        email = stuff[2]
-        date = stuff[3]
-        diff = subprocess.run(['git', 'show', hash], cwd=target_dir, capture_output=True, text=True, check=True)
-        lines_changed = []
-
-        current_file = None
-        file_changes = {str : list}
-        for row in diff.stdout.split("\n"):
-
-            file_match = re.match(r'^\+\+\+ b/(.*)', row)
-
-            if file_match:
-                current_file = file_match.group(1)
-                print(current_file)
-                if current_file not in file_changes:
-                    file_changes[current_file] = []
-
-
-            match = re.match(r'^@@ -(\d+),?(\d+)? \+(\d+),?(\d+)? @@', row)
-            if match and current_file:
-                new_start = int(match.group(3))
-                new_amt = int(match.group(4)) if match.group(4) else 1
-
-                file_changes[current_file].append([new_start, new_amt])
-                
-        commits[hash] = [author, date, email, file_changes]
-        print("Commit: " + hash, end = ". ")
-        print(commits[hash])
-        ### Stop at first commit
-        break
+targetDir = "../../smods"
+scriptPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commit_csv.sh")
 
 try:
-    funcs_json = subprocess.run(
-        ['parse_lua.lua', '../demo.lua'],
-        capture_output=True,
-        text=True,
-        check=True
-    )
-except subprocess.CalledProcessError as e:
-    print(f"Execution failed with return code {e.returncode}")
-    print(f"Error: {e.stderr}")
+    logs = subprocess.run([scriptPath], cwd=targetDir, capture_output=True, text=True, check=True)
+except subprocess.CalledProcessError:
+    sys.exit(1)
 
-funcs_dict = json.loads(funcs_json.stdout)
+currentLogHash = None
+currentLog = None
+currentFile = None
+for line in logs.stdout.split("\n"):
 
-### TEST INSERTS
-commits['test'] = ['Goku', 'Sun, 22 Mar 1733 22:11:35 -0300', 'goku@gmail.com', {'demo.lua': [['1', '21']]}]
+    commitMatch = re.match(r'^commit ([0-9a-f]{40})', line)
+    if commitMatch:
+        if currentLog:
+            commits[currentLogHash] = currentLog
+            #print(commits[currentLogHash])
+            break
+        currentLogHash = commitMatch.group(1)
+        currentLog = {'author': None, 'email': None, 'date': None, 'fileChanges': {}, 'fileFunctions': {}} # file changes are a dictionary of file -> hunks[]
+        currentFile = None
+        continue # move to next line
 
-expertise_map = {}
-for func in funcs_dict['definitions']:
-    func_name = func['name']
-    func_start_line = int(func['line_start'])
-    func_end_line = int(func['line_end'])
+    # iterate until commit line is found
+    if not currentLog:
+        continue
 
-    if func_name not in expertise_map:
-        expertise_map[func_name] = {}
+    authorMatch = re.match(r'^Author: (.+?) <(.+?)>', line)
+    if authorMatch:
+        currentLog['author'] = authorMatch.group(1)
+        currentLog['email'] = authorMatch.group(2)
 
-    for hash, data in commits.items():
-        email = data[2]
-        date = data[1] 
-        files_changed = data[3] 
+    elif dateMatch := re.match(r'^Date:\s+(.+)', line):
+        currentLog['date'] = dateMatch.group(1)
+
+    elif fileMatch := re.match(r'^\+\+\+ b/(.*)', line):
+        currentFile = fileMatch.group(1)
+        currentLog['fileChanges'].setdefault(currentFile, [])
+    
+    elif currentFile and (hunkMatch := re.match(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@', line)):
+        hunkNewStartLine = int(hunkMatch.group(3))
+        hunkNewCount = int(hunkMatch.group(4)) if hunkMatch.group(4) else 1
+        currentLog['fileChanges'][currentFile].append([hunkNewStartLine, hunkNewCount])
         
-        for file, changes in files_changed.items():
-            #change_file = files_changed['demo.lua']
-            func_file = 'game_object.lua'
-            if file == func_file:
-                for change in changes:
-                    change_start = int(change[0])
-                    change_end = change_start + int(change[1])
+    #     currentLog['fileChanges'][currentFile].append({
+    #         'start': hunkNewStartLine,
+    #         'count': hunkNewCount,
+    #         'lines': []
+    #     })
+    
+    # elif currentFile and currentLog['fileChanges'].get(currentFile): # placeholder is in
+    #     currentHunk = currentLog['fileChanges'][currentFile][-1]  # last in list (next always last)
+    #     if line.startswith('+') and not line.startswith('+++'): # new lines
+    #         currentHunk['lines'].append(line[1:])  # strip +
 
-                    if not (change_end < func_start_line or change_start > func_end_line):
-                        if email not in expertise_map[func_name]:
-                            expertise_map[func_name][email] = 1
-                        else:
-                            expertise_map[func_name][email] += 1
 
-print(expertise_map)
+# Last commit
+if currentLog:
+    commits[currentLogHash] = currentLog
 
+
+
+# Funcs extraction
+# TODO: Implement file caching across commmits if not changed too much?
+# Any way to limit search to around commit areas to improve performance?
+expertiseMap = {}
+
+for hash, data in commits.items():
+    
+    for file in data['fileChanges']:
+        fullNewFile = subprocess.run(['git', 'show', f'{hash}:{file}'], 
+         cwd=targetDir, capture_output=True, text=True, check=True)
+        if fullNewFile.returncode != 0: 
+            continue
+
+        with tempfile.NamedTemporaryFile(mode='w', suffix ='.lua', delete=False) as luaInput:
+            luaInput.write(fullNewFile.stdout)
+            luaInputPath = luaInput.name
+        
+        try:
+            funcsJSON = subprocess.run(['parse_lua.lua', luaInputPath],#, input = fullNewFile.stdout,
+            capture_output=True, text=True, check=True)
+            data['fileFunctions'][file] = json.loads(funcsJSON.stdout)
+        except subprocess.CalledProcessError as e:
+            print(f"File not found {file}: {e.stderr}")
+        finally: 
+            os.remove(luaInputPath)
+            
+
+        
+        email = data['email']
+        date  = data['date']
+        expertiseMap.setdefault(email, {})
+        expertiseMap[email].setdefault(date, {})
+        #expertiseMap[email][date].setdefault(functionName, {})
+
+        for func in data['fileFunctions'][file]['definitions']:
+            # Handle both multi-line and single-line functions
+            funcStart = func.get('line_start') or func['line']
+            funcEnd   = func.get('line_end')   or func['line']
+            funcName  = func.get('name')
+
+            for hunkStart, hunkCount in data['fileChanges'][file]:
+                #print(hunkStart, hunkCount)
+                hunkEnd = hunkStart + hunkCount
+
+                isOverlap = not (hunkEnd < funcStart or hunkStart > funcEnd)
+                if isOverlap and funcName not in expertiseMap[email][date]:
+                    #print("Overlap - FunctionStart : " + str(funcStart) + " Function")
+                    expertiseMap[email][date][funcName] = hunkCount
+
+
+# pprint(commits)
+pprint(expertiseMap)
