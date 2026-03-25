@@ -1,3 +1,23 @@
+1. Want to make sure the change-function overlap is in the same file?
+	- Refactorings? What if a function was moved to a different file 
+	  after spending 90% of its life in another?
+
+2. Other history. A commit from 2 years ago will have different function locations
+   than one from today. We run the lua script on 
+		- the raw "new" file (no annotations)
+			- For each commit.
+			- Score each occurence with a time decay
+			- 
+3. Efficiency. Doing a continuous git log -p would probably be more efficient than 
+   piece by piece git shows. Is this possible?
+	- Regex to extract Author: (email)
+	  Date: 
+	  File
+	  
+
+
+// ----------- 03/23/26 -----------------
+
 Author,
 
 Author email?

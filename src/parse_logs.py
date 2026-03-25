@@ -12,12 +12,10 @@ commits = {}
 
 target_dir = "../../smods"
 script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commit_csv.sh")
-result = subprocess.run([script_path], cwd=target_dir, capture_output=True, text=True, check=True)
 
-if result.returncode != 0:
-    os.abort(1)
-else:
-    for line in result.stdout.split("\n"):
+logs = subprocess.run([script_path], cwd=target_dir, capture_output=True, text=True, check=True)
+
+        for line in logs.stdout.split("\n"):
         line = line[1:len(line) - 1]
         stuff = line.split('","')
         hash = stuff[0]
@@ -67,7 +65,7 @@ except subprocess.CalledProcessError as e:
 funcs_dict = json.loads(funcs_json.stdout)
 
 ### TEST INSERTS
-commits['test'] = ['Goku', 'Sun, 22 Mar 1733 22:11:35 -0300', 'goku@gmail.com', {'demo.lua': [['11', '4']]}]
+commits['test'] = ['Goku', 'Sun, 22 Mar 1733 22:11:35 -0300', 'goku@gmail.com', {'demo.lua': [['1', '21']]}]
 
 expertise_map = {}
 for func in funcs_dict['definitions']:
