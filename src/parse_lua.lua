@@ -53,6 +53,7 @@ local function find_name(node)
 		if parent_name then
 			return parent_name .. "." .. name
 		end
+		return "<unk>." .. name
 	end
 end
 do

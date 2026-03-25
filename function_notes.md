@@ -2,3 +2,4 @@
 - Whitespace should be ignored
 - strings wrapped in () should be handled differently
 - Table defintions with brackets are weird
+- test{whatever = function()end} doesn't get it's calling name
