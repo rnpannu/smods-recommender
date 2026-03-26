@@ -7,12 +7,12 @@ import tempfile
 from pprint import pprint
 from collections import defaultdict
 
-# Expertise map: {author(email) : {date : [functionsWorkedOn[(func_name, lines_worked_on)], functionsCalled[(func_name, line_called)]}}
-# email mapped to date, date mapped to a 2-list of lists of 2-tuples
-
 # 1. Extract commit history from logs
 # 2. For each (complete) file in the commit, extract functions
 # 3. Map hunk changes to functions and add them to developer expertise map under their date
+
+# Expertise map: {author(email) : {date : [functionsWorkedOn[(func_name, lines_worked_on)], functionsCalled[(func_name, line_called)]}}
+# email mapped to date, date mapped to a 2-list of lists of 2-tuples
 
 # Parse Logs i) run log script -> ii) regex matching
 targetDir = "../../smods"
@@ -31,19 +31,18 @@ def extractFunctions(log, file, hunks, email, date):
     if fullNewFile.returncode != 0: 
         return
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix ='.lua', delete=False) as luaInput:
+    with tempfile.NamedTemporaryFile(mode='w', suffix ='.lua', delete=True) as luaInput:
         luaInput.write(fullNewFile.stdout)
         luaInputPath = luaInput.name
-
-    try:
-        funcsJSON = subprocess.run(['parse_lua.lua', luaInputPath],#, input = fullNewFile.stdout,
-        capture_output=True, text=True, check=True)
-        #parsedFuncs = defaultdict(list, json.loads(funcsJSON.stdout))
-        functionJSON = json.loads(funcsJSON.stdout)
-    except subprocess.CalledProcessError as e:
-        print(f"File not found {file}: {e.stderr}")
-    finally: 
-        os.remove(luaInputPath)
+        try:
+            funcsJSON = subprocess.run(['parse_lua.lua', luaInputPath],#, input = fullNewFile.stdout,
+            capture_output=True, text=True, check=True)
+            #parsedFuncs = defaultdict(list, json.loads(funcsJSON.stdout))
+            functionJSON = json.loads(funcsJSON.stdout)
+        except subprocess.CalledProcessError as e:
+            print(f"File not found {file}: {e.stderr}")
+        finally: 
+            os.remove(luaInputPath)
 
     # Match hunk changes to function map and update expertise
     for hunk in hunks:
@@ -58,6 +57,14 @@ def extractFunctions(log, file, hunks, email, date):
             if hunkStart <= functionCall['line'] <= hunkEnd:
                 expertiseMap[email][date][1].append((functionCall['name'], functionCall['line']))
 
+def defaultdict_to_dict(d):
+    if isinstance(d, defaultdict):
+        d = {k: defaultdict_to_dict(v) for k, v in d.items()}
+    elif isinstance(d, list):
+        d = [defaultdict_to_dict(i) for i in d]
+    elif isinstance(d, tuple):
+        d = list(d)
+    return d
 
 # Parse log metadata with regex
 scriptPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commit_csv.sh")
@@ -72,19 +79,21 @@ date = None
 currentFile = None
 currentLogHunks: list[tuple[int, int]]
 
+counter = 0
 for line in logs.stdout.split("\n"):
-
+    
+    if counter >= 50:
+        break
     commitMatch = re.match(r'^commit ([0-9a-f]{40})', line)
     if commitMatch:
         if currentFile and currentLogHunks:
             extractFunctions(currentLog, currentFile, currentLogHunks, email, date)
-            break
-        
+            
         currentLog = commitMatch.group(1)
         currentFile = None
         currentLogHunks = []
+        counter += 1
         continue 
-
     # Iterate until commit line is found
     if not currentLog:
         continue
@@ -118,8 +127,8 @@ for line in logs.stdout.split("\n"):
 if currentFile and currentLogHunks:
     extractFunctions(currentLog, currentFile, currentLogHunks, email, date)
 
-pprint(expertiseMap)
-
+with open("expertise_map.json", "w") as f:
+    json.dump(defaultdict_to_dict(expertiseMap), f, indent=2)
 # Keyed access instead of 0/1:
 # expertiseMap = defaultdict(lambda: defaultdict(lambda: {"functionsWorkedOn": [], "functionsCalled": []}))
 # expertiseMap[email][date]["functionsWorkedOn"].append((functionName, linesChanged))
