@@ -7,22 +7,16 @@ import tempfile
 from pprint import pprint
 from collections import defaultdict
 
+# Expertise map: {author(email) : {date : [functionsWorkedOn[(func_name, lines_worked_on)], functionsCalled[(func_name, line_called)]}}
+# email mapped to date, date mapped to a 2-list of lists of 2-tuples
 
-# Two maps
-# Commit history : {hash : [author, email, date, hunkChanges{file : [startLine, lineCount]}]}
-# Expertise map: {author(email) : {date : functionsWorkedOn{ function: linesChanged}}}
 # 1. Extract commit history from logs
 # 2. For each (complete) file in the commit, extract functions
 # 3. Map hunk changes to functions and add them to developer expertise map under their date
 
-
-# 1. Parse Logs
-# Run log script
+# Parse Logs i) run log script -> ii) regex matching
 targetDir = "../../smods"
 
-# {email (author key) :  { date_of_commit: [functionsWorkedOn[(function, linesChanged)], functionsCalled[function, times_called]] }
-# email mapped to date, date mapped to a 2-list of lists of 2-tuples
-# Times called is a list not a dictionary because a function can have the same name but be at different spots
 expertiseMap: defaultdict[str, defaultdict[str, list]]
 expertiseMap = defaultdict(lambda: defaultdict(lambda: [[], []]))
 
@@ -65,7 +59,7 @@ def extractFunctions(log, file, hunks, email, date):
                 expertiseMap[email][date][1].append((functionCall['name'], functionCall['line']))
 
 
-# 1. Parse log metadata with regex
+# Parse log metadata with regex
 scriptPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commit_csv.sh")
 try:
     logs = subprocess.run([scriptPath], cwd=targetDir, capture_output=True, text=True, check=True)
@@ -80,7 +74,6 @@ currentLogHunks: list[tuple[int, int]]
 
 for line in logs.stdout.split("\n"):
 
-     # ----------- Begin parsing log ---------------
     commitMatch = re.match(r'^commit ([0-9a-f]{40})', line)
     if commitMatch:
         if currentFile and currentLogHunks:
