@@ -6,20 +6,29 @@ import re
 import tempfile
 from pprint import pprint
 
+
+# Two maps
+# Commit history : {hash : [author, email, date, hunkChanges{file : [startLine, lineCount]}]}
+# Expertise map: {author(email) : {date : functionsWorkedOn{ function: linesChanged}}}
+# 1. Extract commit history from logs
+# 2. For each (complete) file in the commit, extract functions
+# 3. Map hunk changes to functions and add them to developer expertise map under their date
 hash: str
 author: str
 email: str
 date: str
 commits = {}
 
+# 1. Parse Logs
+# Run log script
 targetDir = "../../smods"
 scriptPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commit_csv.sh")
-
 try:
     logs = subprocess.run([scriptPath], cwd=targetDir, capture_output=True, text=True, check=True)
 except subprocess.CalledProcessError:
     sys.exit(1)
 
+# Obtain metadata with regex
 currentLogHash = None
 currentLog = None
 currentFile = None
@@ -29,12 +38,12 @@ for line in logs.stdout.split("\n"):
     if commitMatch:
         if currentLog:
             commits[currentLogHash] = currentLog
-            #print(commits[currentLogHash])
+            #print(commits[currentLogHash]) # Print full commit data
             break
         currentLogHash = commitMatch.group(1)
         currentLog = {'author': None, 'email': None, 'date': None, 'fileChanges': {}, 'fileFunctions': {}} # file changes are a dictionary of file -> hunks[]
         currentFile = None
-        continue # move to next line
+        continue 
 
     # iterate until commit line is found
     if not currentLog:
