@@ -5,6 +5,7 @@ import json
 import re
 import tempfile
 from pprint import pprint
+from collections import defaultdict
 
 
 # Two maps
@@ -13,126 +14,120 @@ from pprint import pprint
 # 1. Extract commit history from logs
 # 2. For each (complete) file in the commit, extract functions
 # 3. Map hunk changes to functions and add them to developer expertise map under their date
-hash: str
-author: str
-email: str
-date: str
-commits = {}
+
 
 # 1. Parse Logs
 # Run log script
 targetDir = "../../smods"
+
+# {email (author key) :  { date_of_commit: [functionsWorkedOn[(function, linesChanged)], functionsCalled[function, times_called]] }
+# email mapped to date, date mapped to a 2-list of lists of 2-tuples
+# Times called is a list not a dictionary because a function can have the same name but be at different spots
+expertiseMap: defaultdict[str, defaultdict[str, list]]
+expertiseMap = defaultdict(lambda: defaultdict(lambda: [[], []]))
+
+# Update function expertise values for a file change in a commit
+def extractFunctions(log, file, hunks, email, date):
+
+    # Extract functions from a file corresponding to a change hunk
+    functionJSON: defaultdict[str, list[dict[str, int | str]]]
+
+    fullNewFile = subprocess.run(['git', 'show', f'{log}:{file}'], 
+    cwd=targetDir, capture_output=True, text=True) #, check=True)
+    if fullNewFile.returncode != 0: 
+        return
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix ='.lua', delete=False) as luaInput:
+        luaInput.write(fullNewFile.stdout)
+        luaInputPath = luaInput.name
+
+    try:
+        funcsJSON = subprocess.run(['parse_lua.lua', luaInputPath],#, input = fullNewFile.stdout,
+        capture_output=True, text=True, check=True)
+        #parsedFuncs = defaultdict(list, json.loads(funcsJSON.stdout))
+        functionJSON = json.loads(funcsJSON.stdout)
+    except subprocess.CalledProcessError as e:
+        print(f"File not found {file}: {e.stderr}")
+    finally: 
+        os.remove(luaInputPath)
+
+    # Match hunk changes to function map and update expertise
+    for hunk in hunks:
+        hunkStart = hunk[0]
+        hunkEnd = hunk[0] + hunk[1] - 1
+
+        for functionDefinition in functionJSON['definitions']:
+            if functionDefinition['line_start'] <= hunkEnd and functionDefinition['line_end'] >= hunkStart:
+                linesChanged = min(hunkEnd, functionDefinition['line_end']) - max(hunkStart, functionDefinition['line_start']) + 1 # either the whole function or a subsection
+                expertiseMap[email][date][0].append((functionDefinition['name'], linesChanged))
+        for functionCall in functionJSON['calls']:
+            if hunkStart <= functionCall['line'] <= hunkEnd:
+                expertiseMap[email][date][1].append((functionCall['name'], functionCall['line']))
+
+
+# 1. Parse log metadata with regex
 scriptPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commit_csv.sh")
 try:
     logs = subprocess.run([scriptPath], cwd=targetDir, capture_output=True, text=True, check=True)
 except subprocess.CalledProcessError:
     sys.exit(1)
 
-# Obtain metadata with regex
-currentLogHash = None
 currentLog = None
+email = None
+date = None
 currentFile = None
+currentLogHunks: list[tuple[int, int]]
+
 for line in logs.stdout.split("\n"):
 
+     # ----------- Begin parsing log ---------------
     commitMatch = re.match(r'^commit ([0-9a-f]{40})', line)
     if commitMatch:
-        if currentLog:
-            commits[currentLogHash] = currentLog
-            #print(commits[currentLogHash]) # Print full commit data
+        if currentFile and currentLogHunks:
+            extractFunctions(currentLog, currentFile, currentLogHunks, email, date)
             break
-        currentLogHash = commitMatch.group(1)
-        currentLog = {'author': None, 'email': None, 'date': None, 'fileChanges': {}, 'fileFunctions': {}} # file changes are a dictionary of file -> hunks[]
+        
+        currentLog = commitMatch.group(1)
         currentFile = None
+        currentLogHunks = []
         continue 
 
-    # iterate until commit line is found
+    # Iterate until commit line is found
     if not currentLog:
         continue
 
     authorMatch = re.match(r'^Author: (.+?) <(.+?)>', line)
     if authorMatch:
-        currentLog['author'] = authorMatch.group(1)
-        currentLog['email'] = authorMatch.group(2)
+        email = authorMatch.group(2)
+        continue
 
-    elif dateMatch := re.match(r'^Date:\s+(.+)', line):
-        currentLog['date'] = dateMatch.group(1)
+    dateMatch = re.match(r'^Date:\s+(.+)', line)
+    if dateMatch:
+        date = dateMatch.group(1)
+        continue
 
-    elif fileMatch := re.match(r'^\+\+\+ b/(.*)', line):
+    # Find file change header
+    fileMatch = re.match(r'^\+\+\+ b/(.*)', line)
+    if fileMatch:
+        if currentFile and currentLogHunks:
+            extractFunctions(currentLog, currentFile, currentLogHunks, email, date)
+            currentLogHunks = []
         currentFile = fileMatch.group(1)
-        currentLog['fileChanges'].setdefault(currentFile, [])
-    
-    elif currentFile and (hunkMatch := re.match(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@', line)):
+        continue
+        
+    # Find all hunks for that file change
+    hunkMatch = re.match(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@', line)
+    if currentFile and hunkMatch:
         hunkNewStartLine = int(hunkMatch.group(3))
         hunkNewCount = int(hunkMatch.group(4)) if hunkMatch.group(4) else 1
-        currentLog['fileChanges'][currentFile].append([hunkNewStartLine, hunkNewCount])
-        
-    #     currentLog['fileChanges'][currentFile].append({
-    #         'start': hunkNewStartLine,
-    #         'count': hunkNewCount,
-    #         'lines': []
-    #     })
-    
-    # elif currentFile and currentLog['fileChanges'].get(currentFile): # placeholder is in
-    #     currentHunk = currentLog['fileChanges'][currentFile][-1]  # last in list (next always last)
-    #     if line.startswith('+') and not line.startswith('+++'): # new lines
-    #         currentHunk['lines'].append(line[1:])  # strip +
+        currentLogHunks.append((hunkNewStartLine, hunkNewCount))
 
+if currentFile and currentLogHunks:
+    extractFunctions(currentLog, currentFile, currentLogHunks, email, date)
 
-# Last commit
-if currentLog:
-    commits[currentLogHash] = currentLog
-
-
-
-# Funcs extraction
-# TODO: Implement file caching across commmits if not changed too much?
-# Any way to limit search to around commit areas to improve performance?
-expertiseMap = {}
-
-for hash, data in commits.items():
-    
-    for file in data['fileChanges']:
-        fullNewFile = subprocess.run(['git', 'show', f'{hash}:{file}'], 
-         cwd=targetDir, capture_output=True, text=True, check=True)
-        if fullNewFile.returncode != 0: 
-            continue
-
-        with tempfile.NamedTemporaryFile(mode='w', suffix ='.lua', delete=False) as luaInput:
-            luaInput.write(fullNewFile.stdout)
-            luaInputPath = luaInput.name
-        
-        try:
-            funcsJSON = subprocess.run(['parse_lua.lua', luaInputPath],#, input = fullNewFile.stdout,
-            capture_output=True, text=True, check=True)
-            data['fileFunctions'][file] = json.loads(funcsJSON.stdout)
-        except subprocess.CalledProcessError as e:
-            print(f"File not found {file}: {e.stderr}")
-        finally: 
-            os.remove(luaInputPath)
-            
-
-        
-        email = data['email']
-        date  = data['date']
-        expertiseMap.setdefault(email, {})
-        expertiseMap[email].setdefault(date, {})
-        #expertiseMap[email][date].setdefault(functionName, {})
-
-        for func in data['fileFunctions'][file]['definitions']:
-            # Handle both multi-line and single-line functions
-            funcStart = func.get('line_start') or func['line']
-            funcEnd   = func.get('line_end')   or func['line']
-            funcName  = func.get('name')
-
-            for hunkStart, hunkCount in data['fileChanges'][file]:
-                #print(hunkStart, hunkCount)
-                hunkEnd = hunkStart + hunkCount
-
-                isOverlap = not (hunkEnd < funcStart or hunkStart > funcEnd)
-                if isOverlap and funcName not in expertiseMap[email][date]:
-                    #print("Overlap - FunctionStart : " + str(funcStart) + " Function")
-                    expertiseMap[email][date][funcName] = hunkCount
-
-
-# pprint(commits)
 pprint(expertiseMap)
+
+# Keyed access instead of 0/1:
+# expertiseMap = defaultdict(lambda: defaultdict(lambda: {"functionsWorkedOn": [], "functionsCalled": []}))
+# expertiseMap[email][date]["functionsWorkedOn"].append((functionName, linesChanged))
+
