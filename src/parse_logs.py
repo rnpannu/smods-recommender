@@ -26,24 +26,13 @@ def extractFunctions(log, file, hunks, email, date):
     # Extract functions from a file corresponding to a change hunk
     functionJSON: defaultdict[str, list[dict[str, int | str]]]
 
-    fullNewFile = subprocess.run(['git', 'show', f'{log}:{file}'], 
-    cwd=targetDir, capture_output=True, text=True) #, check=True)
-    if fullNewFile.returncode != 0: 
-        return
-
-    with tempfile.NamedTemporaryFile(mode='w', suffix ='.lua', delete=True) as luaInput:
-        luaInput.write(fullNewFile.stdout)
-        luaInputPath = luaInput.name
-        try:
-            funcsJSON = subprocess.run(['./parse_lua.lua', luaInputPath],#, input = fullNewFile.stdout,
-            capture_output=True, text=True, check=True)
-            #parsedFuncs = defaultdict(list, json.loads(funcsJSON.stdout))
-            functionJSON = json.loads(funcsJSON.stdout)
-        except subprocess.CalledProcessError as e:
-            print(f"Child process error {file}: {e.stderr}")
-            print(f"File: {file}, Hash: {log}")
-        finally: 
-            os.remove(luaInputPath)
+    try:
+        funcsJSON = subprocess.run(['./parse_log_file.sh', targetDir, f'{log}:{file}'],
+        capture_output=True, text=True, check=True)
+        functionJSON = json.loads(funcsJSON.stdout)
+    except subprocess.CalledProcessError as e:
+        print(f"Child process error {file}: {e.stderr}")
+        print(f"File: {file}, Hash: {log}")
 
     # Match hunk changes to function map and update expertise
     for hunk in hunks:

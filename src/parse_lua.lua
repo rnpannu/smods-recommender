@@ -7,7 +7,20 @@ if is_scripting_mode then
 		print("No file passed in scripting mode")
 		os.exit(1)
 	end
-	vim.cmd('edit ' .. filename)
+	if filename == "-" then
+		-- Read from stdin
+		local content = io.read("*a")
+		if content then
+			vim.api.nvim_buf_set_lines(0, 0, -1, false, vim.split(content, "\n"))
+			vim.api.nvim_set_option_value('filetype', 'lua', {})
+		else
+			print("No file passed in stdin")
+			os.exit(1)
+		end
+	else
+		-- Open the file
+		vim.cmd('edit ' .. filename)
+	end
 end
 
 local data = {
