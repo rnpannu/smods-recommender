@@ -8,7 +8,6 @@ if is_scripting_mode then
 		os.exit(1)
 	end
 	vim.cmd('edit ' .. filename)
-	
 end
 
 local data = {
@@ -48,7 +47,9 @@ local function find_name(node)
 		if not var_list then return end
 		return node_text(var_list:child(found))
 	elseif type == "field" then
-		local name = node_text(node:prev_named_sibling())
+		local sibling = node:prev_named_sibling()
+		if not sibling then return end
+		local name = node_text(sibling)
 		local parent_name = find_name(parent:parent())
 		if parent_name then
 			return parent_name .. "." .. name

@@ -35,12 +35,13 @@ def extractFunctions(log, file, hunks, email, date):
         luaInput.write(fullNewFile.stdout)
         luaInputPath = luaInput.name
         try:
-            funcsJSON = subprocess.run(['parse_lua.lua', luaInputPath],#, input = fullNewFile.stdout,
+            funcsJSON = subprocess.run(['./parse_lua.lua', luaInputPath],#, input = fullNewFile.stdout,
             capture_output=True, text=True, check=True)
             #parsedFuncs = defaultdict(list, json.loads(funcsJSON.stdout))
             functionJSON = json.loads(funcsJSON.stdout)
         except subprocess.CalledProcessError as e:
-            print(f"File not found {file}: {e.stderr}")
+            print(f"Child process error {file}: {e.stderr}")
+            print(f"File: {file}, Hash: {log}")
         finally: 
             os.remove(luaInputPath)
 
