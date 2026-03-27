@@ -57,6 +57,7 @@ def extractFunctions(log, file, hunks, email, date):
             if hunkStart <= functionCall['line'] <= hunkEnd:
                 expertiseMap[email][date][1].append((functionCall['name'], functionCall['line']))
 
+# Helper function for printing the final expertise map
 def defaultdict_to_dict(d):
     if isinstance(d, defaultdict):
         d = {k: defaultdict_to_dict(v) for k, v in d.items()}
