@@ -16,15 +16,22 @@ from collections import defaultdict
 
 # Parse Logs i) run log script -> ii) regex matching
 
-targetDir = "../../smods"
+targetDir = '../../smods'
+expertiseMapFile = 'expertise_map.json'
 
-processedCommitsFile = "processed_commits.txt"
-expertiseMap: defaultdict[str, defaultdict[str, list]]
-expertiseMap = defaultdict(lambda: defaultdict(lambda: [{}, {}]))
+if os.path.exists(expertiseMapFile):
+    with open(expertiseMapFile, 'r') as f:
+        expertiseMap: dict = json.load(f)
+else:
+    expertiseMap = {}
+    # expertiseMap: defaultdict[str, defaultdict[str, list]]
+    # expertiseMap = defaultdict(lambda: defaultdict(lambda: [str, {}, {}]))
 
 # Update function expertise values for a file change in a commit
-def extractFunctions(log, file, hunks, email, date):
-
+def extractFunctions(log, email, date, file, hunks):
+    if not file.endswith('.lua'):
+            return
+    
     # Extract functions from a file corresponding to a change hunk
     functionJSON: defaultdict[str, list[dict[str, int | str]]]
 
@@ -36,29 +43,41 @@ def extractFunctions(log, file, hunks, email, date):
         print(f"Child process error {file}: {e.stderr}")
         print(f"File: {file}, Hash: {log}")
 
+    # {'email' : {'hash' : {'date' : '', 'definitions': {}, 'calls'}}}
+    entry = expertiseMap.setdefault(email, {}).setdefault(log, {'date': date, 'definitions': {}, 'calls': {}})
+
+    entry["date"] = date 
+
+    definitions = entry['definitions']
+    calls       = entry['calls']
     # Match hunk changes to function map and update expertise
     for hunk in hunks:
         hunkStart = hunk[0]
         hunkEnd = hunk[0] + hunk[1] - 1
 
-        for functionDefinition in functionJSON['definitions']:
-            if functionDefinition['line_start'] <= hunkEnd and functionDefinition['line_end'] >= hunkStart:
-                funcName = functionDefinition['name']
-                linesChanged = min(hunkEnd, functionDefinition['line_end']) - max(hunkStart, functionDefinition['line_start']) + 1 # either the whole function or a subsection
-
-                if funcName in expertiseMap[email][date][0]:
-                    expertiseMap[email][date][0][funcName] += linesChanged
-                else:
-                    expertiseMap[email][date][0][funcName] = linesChanged
+        for funcDef in functionJSON.get('definitions', []):
+            if funcDef['line_start'] <= hunkEnd and funcDef['line_end'] >= hunkStart:
+                funcName = funcDef['name']
+                linesChanged = min(hunkEnd, funcDef['line_end']) - max(hunkStart, funcDef['line_start']) + 1 # either the whole function or a subsection
+                definitions[funcName] = definitions.get(funcName, 0) + linesChanged
                     
-        for functionCall in functionJSON['calls']:
+        for functionCall in functionJSON.get('calls', []):
             if hunkStart <= functionCall['line'] <= hunkEnd:
                 funcName = functionCall['name']
+                calls[funcName] = calls.get(funcName, 0) + 1
 
-                if funcName in expertiseMap[email][date][1]:
-                    expertiseMap[email][date][1][funcName] += 1
-                else:
-                    expertiseMap[email][date][1][funcName] = 1
+
+def saveMap(log):
+    if log and log not in processedCommits:
+        temp = expertiseMapFile + '.tmp'
+        with open(temp, 'w') as tempFile:
+            json.dump(expertiseMap, tempFile, indent=2)
+        os.replace(temp, expertiseMapFile)
+        processedCommits.add(currentLog)
+
+def appendFileChanges(log, email, date, file, hunks):
+    if log and email and date and file and hunks:
+        extractFunctions(log, email, date, file, hunks)
 
 # Helper function for printing the final expertise map
 def defaultdict_to_dict(d):
@@ -70,41 +89,32 @@ def defaultdict_to_dict(d):
         d = list(d)
     return d
 
-# Load any already processed commits for skipping
-if os.path.exists(processedCommitsFile):
-    with open(processedCommitsFile, "r") as commits:
-        processedCommits = set(line.strip() for line in commits if line.strip())
-else:
-    processedCommits = set()
-
-commitFileHandle = open(processedCommitsFile, "a") # append new commits to end of file
 # Parse log metadata with regex
-scriptPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "commit_csv.sh")
+scriptPath = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'commit_csv.sh')
 try:
     logs = subprocess.run([scriptPath], cwd=targetDir, capture_output=True, text=True, check=True)
 except subprocess.CalledProcessError:
     sys.exit(1)
 
-currentLog = None
-email = None
-date = None
-currentFile = None
-currentLogHunks: list[tuple[int, int]]
+currentLog: str | None = None
+currentLogEmail: str | None = None
+currentLogDate: str | None = None
+currentFile: str | None = None
+currentLogHunks: list[tuple[int, int]] = []
+
+processedCommits: set[str] = set()
+for hashes in expertiseMap.values():
+    processedCommits.update(hashes.keys())
 
 counter = 0
-for line in logs.stdout.split("\n"):
+for line in logs.stdout.split('\n'):
     
     if counter > 10:
         break
     commitMatch = re.match(r'^commit ([0-9a-f]{40})', line)
     if commitMatch:
-        if currentFile and currentLogHunks:
-            extractFunctions(currentLog, currentFile, currentLogHunks, email, date)
-        
-        if currentLog and currentLog not in processedCommits:
-            commitFileHandle.write(currentLog + "\n")
-            commitFileHandle.flush() # flush stream in case of crash
-            processedCommits.add(currentLog)
+        appendFileChanges(currentLog, currentLogEmail, currentLogDate, currentFile, currentLogHunks)
+        saveMap(currentLog)
 
         currentLog = commitMatch.group(1)
         currentFile = None
@@ -121,20 +131,19 @@ for line in logs.stdout.split("\n"):
 
     authorMatch = re.match(r'^Author: (.+?) <(.+?)>', line)
     if authorMatch:
-        email = authorMatch.group(2)
+        currentLogEmail = authorMatch.group(2)
         continue
 
     dateMatch = re.match(r'^Date:\s+(.+)', line)
     if dateMatch:
-        date = dateMatch.group(1)
+        currentLogDate = dateMatch.group(1)
         continue
 
     # Find file change header
     fileMatch = re.match(r'^\+\+\+ b/(.*)', line)
     if fileMatch:
-        if currentFile and currentLogHunks:
-            extractFunctions(currentLog, currentFile, currentLogHunks, email, date)
-            currentLogHunks = []
+        appendFileChanges(currentLog, currentLogEmail, currentLogDate, currentFile, currentLogHunks)
+        currentLogHunks = []
         currentFile = fileMatch.group(1)
         continue
         
@@ -145,14 +154,9 @@ for line in logs.stdout.split("\n"):
         hunkNewCount = int(hunkMatch.group(4)) if hunkMatch.group(4) else 1
         currentLogHunks.append((hunkNewStartLine, hunkNewCount))
 
-if currentFile and currentLogHunks:
-    extractFunctions(currentLog, currentFile, currentLogHunks, email, date)
-if currentLog and currentLog not in processedCommits:
-    commitFileHandle.write(currentLog + "\n")
+appendFileChanges(currentLog,  currentLogEmail, currentLogDate, currentFile, currentLogHunks)
+saveMap(currentLog)
 
-commitFileHandle.close()
-with open("expertise_map.json", "w") as f:
-    json.dump(defaultdict_to_dict(expertiseMap), f, indent=2)
 # Keyed access instead of 0/1:
 # expertiseMap = defaultdict(lambda: defaultdict(lambda: {"functionsWorkedOn": [], "functionsCalled": []}))
 # expertiseMap[email][date]["functionsWorkedOn"].append((functionName, linesChanged))

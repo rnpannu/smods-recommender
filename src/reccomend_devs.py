@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from collections import defaultdict
 
+decayWindow = 100
 # Compute time decay
 def getDecay(dateStr, windowDays):
     try:
@@ -17,10 +18,14 @@ def getDecay(dateStr, windowDays):
 
 def scoreDeveloper(changeHistory, queryFuncs, modWeight, callWeight):
     totalScore = 0.0
-    expertise = defaultdict(lambda: {"totalHits": 0, "modScore": 0.0, "callScore": 0.0})
+    expertise = defaultdict(lambda: {'totalHits': 0, 'modScore': 0.0, 'callScore': 0.0})
 
-    for dateStr, (modDict, callDict) in changeHistory.items():
-        timeDecay = getDecay(dateStr, 100)
+    for log, entry in changeHistory.items():
+
+        timeDecay = getDecay(entry['date'], decayWindow)
+
+        modDict = entry['definitions']
+        callDict = entry['calls']
 
         for func in queryFuncs:
             linesChanged = modDict.get(func, 0)
@@ -28,9 +33,9 @@ def scoreDeveloper(changeHistory, queryFuncs, modWeight, callWeight):
             if not linesChanged and not calls:
                 continue
 
-            expertise[func]["totalHits"] += 1
-            expertise[func]["modScore"]  += modWeight  * linesChanged * timeDecay
-            expertise[func]["callScore"] += callWeight * calls * timeDecay
+            expertise[func]['totalHits'] += 1
+            expertise[func]['modScore']  += modWeight  * linesChanged * timeDecay
+            expertise[func]['callScore'] += callWeight * calls * timeDecay
             
             totalScore += (modWeight * linesChanged + callWeight * calls) * timeDecay
 
@@ -39,9 +44,9 @@ def scoreDeveloper(changeHistory, queryFuncs, modWeight, callWeight):
 def printResults(rankedList, queryFuncs, topN):
 
     if not rankedList:
-        print("No developers found.")
+        print('No developers found.')
         return
-    print(f"Top {min(topN, len(rankedList))} of {len(rankedList)} developers\n")
+    print(f'Top {min(topN, len(rankedList))} of {len(rankedList)} developers\n')
 
     for rank, (email, score, expertise) in enumerate(rankedList[:topN], 1):
         print(f"#{rank} {email}  score: {score:.2f}")
