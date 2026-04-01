@@ -111,6 +111,8 @@ for line in logs.stdout.split('\n'):
     
     # if counter > 10:
     #     break
+    if counter > 1:
+        break
     commitMatch = re.match(r'^commit ([0-9a-f]{40})', line)
     if commitMatch:
         appendFileChanges(currentLog, currentLogEmail, currentLogDate, currentFile, currentLogHunks)
@@ -121,6 +123,7 @@ for line in logs.stdout.split('\n'):
         currentLogHunks = []
 
         if currentLog in processedCommits:
+            print('skipping')
             currentLog = None
         
         counter += 1
