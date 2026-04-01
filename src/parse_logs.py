@@ -109,8 +109,8 @@ for hashes in expertiseMap.values():
 counter = 0
 for line in logs.stdout.split('\n'):
     
-    if counter > 10:
-        break
+    # if counter > 10:
+    #     break
     commitMatch = re.match(r'^commit ([0-9a-f]{40})', line)
     if commitMatch:
         appendFileChanges(currentLog, currentLogEmail, currentLogDate, currentFile, currentLogHunks)
