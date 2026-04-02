@@ -25,8 +25,8 @@ def scoreDeveloper(changeHistory, queryFuncs, modWeight, callWeight, decayWindow
 
         timeDecay = getDecay(entry['date'], decayWindow)
 
-        modDict = entry['definitions']
-        callDict = entry['calls']
+        modDict = {normalizeName(funcKey): value for funcKey, value in entry['definitions'].items()}
+        callDict = {normalizeName(funcKey): value for funcKey, value in entry['calls'].items()}
 
         for func in queryFuncs:
             linesChanged = modDict.get(func, 0)
@@ -62,8 +62,8 @@ def scoreDeveloperBetter(changeHistory, queryFuncs, modWeight, callWeight, decay
     for entry in changeHistory.values():
 
         timeDecay = expDecay(entry['date'], decayWindow)
-        modDict = entry['definitions']
-        callDict = entry['calls']
+        modDict = {normalizeName(funcKey): value for funcKey, value in entry['definitions'].items()}
+        callDict = {normalizeName(funcKey): value for funcKey, value in entry['calls'].items()}
 
         for func in queryFuncs:
             linesChanged = modDict.get(func, 0)
@@ -107,6 +107,9 @@ def printResults(rankedList, queryFuncs, topN):
             print(f"   {func}: commits={detail['totalHits']}, modifications={detail['modScore']:.2f}, calls={detail['callScore']:.2f}")
         print()
 
+def normalizeName(name):
+    return name.replace(':', '.')
+
 if os.path.exists(userMapFile):
     with open(userMapFile, 'r') as f:
         userMap: dict = json.load(f)
@@ -128,7 +131,7 @@ args = parser.parse_args()
 with open(args.map) as expertiseJSON:
     expertiseMap = json.load(expertiseJSON)
 
-queryFuncs = set(args.functions)
+queryFuncs = {normalizeName(funcName) for funcName in args.functions}
 
 results = {}
 for email, changeHistory in expertiseMap.items():
