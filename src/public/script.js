@@ -12,7 +12,10 @@ let timeout = 0
 
 async function handleInput() {
 	const names = func.value.trim()
-	if (!names) return out.innertText = ""
+	if (!names) {
+		out.innerText = ""
+		return 
+	}
 	const input = { 
 		names,
 		modWeight: modWeight.value,
@@ -45,7 +48,7 @@ async function handleInput() {
 		p.innerText = `#${i + 1} ${d.github?.login || (d.id + " (Missing name map)")} (Score: ${d.score.toFixed(2)})`
 		p.appendChild(document.createElement("br"))
 		d.methods.forEach(m => {
-			p.append(`${m.name}: commits=${m.commits}, modifications=${m.modifications.toFixed(2)}, calls=${m.calls.toFixed(2)}`)
+			p.append(`${m.name}: commits=${m.commits}, modifications=${m.modifications.toFixed(2)}, calls=${m.calls.toFixed(2)}, decay weight=${m.decay.toFixed(2)}`)
 			p.appendChild(document.createElement("br"))
 		})
 		out.appendChild(p);

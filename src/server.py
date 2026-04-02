@@ -59,11 +59,13 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     
                     methods_list = []
                     for method_name, stats in methods_dict.items():
+                        print(stats)
                         method_obj = {
                             "name": method_name,
                             "commits": stats["totalHits"],
                             "modifications": stats["modScore"],
-                            "calls": stats["callScore"]
+                            "calls": stats["callScore"],
+                            "decay": stats["decay"],
                         }
                         methods_list.append(method_obj)
                     
