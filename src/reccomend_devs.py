@@ -57,16 +57,20 @@ def expDecay(dateStr, halfLifeDays):
 def scoreDeveloperBetter(changeHistory, queryFuncs, modWeight, callWeight, decayWindow, diversityWeight, consistencyWeight):
     totalScore = 0.0
     # func : {hits, mod, calls}
-    expertise = defaultdict(lambda: {'totalHits': 0, 'modScore': 0.0, 'callScore': 0.0})
-
+    expertise = defaultdict(lambda: {'totalHits': 0, 'modScore': 0.0, 'callScore': 0.0, 'decay': 0.0})
+    avgDecay = 0
+    counter = 0
     for entry in changeHistory.values():
 
         timeDecay = expDecay(entry['date'], decayWindow)
+        avgDecay += timeDecay
+        counter += 1
         modDict = {normalizeName(funcKey): value for funcKey, value in entry['definitions'].items()}
         callDict = {normalizeName(funcKey): value for funcKey, value in entry['calls'].items()}
 
         for func in queryFuncs:
             linesChanged = modDict.get(func, 0)
+        
             calls = callDict.get(func, 0)
             if not linesChanged and not calls:
                 continue
@@ -74,8 +78,9 @@ def scoreDeveloperBetter(changeHistory, queryFuncs, modWeight, callWeight, decay
             expertise[func]['totalHits'] += 1
             expertise[func]['modScore']  += modWeight  * linesChanged * timeDecay
             expertise[func]['callScore'] += callWeight * calls * timeDecay
-            
+            expertise[func]['decay'] += timeDecay
             #totalScore += (modWeight * linesChanged + callWeight * calls) * timeDecay
+    
     
     if not expertise:
         return 0.0, {}
@@ -92,7 +97,7 @@ def scoreDeveloperBetter(changeHistory, queryFuncs, modWeight, callWeight, decay
     )
  
     totalScore = baseScore * diversityMultiplier + consistencyBonus
-    return totalScore, dict(expertise)
+    return totalScore,  dict(expertise)
 
 def printResults(rankedList, queryFuncs, topN):
 
@@ -104,7 +109,7 @@ def printResults(rankedList, queryFuncs, topN):
     for rank, (email, score, expertise) in enumerate(rankedList[:topN], 1):
         print(f"#{rank} {email}  score: {score:.2f}")
         for func, detail in expertise.items():
-            print(f"   {func}: commits={detail['totalHits']}, modifications={detail['modScore']:.2f}, calls={detail['callScore']:.2f}")
+            print(f"   {func}: commits={detail['totalHits']}, modifications={detail['modScore']:.2f}, calls={detail['callScore']:.2f}, decay={detail['decay']:.2f}")
         print()
 
 def normalizeName(name):
