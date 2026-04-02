@@ -116,59 +116,66 @@ if os.path.exists(userMapFile):
 else:
     userMap = {}
 
-parser = argparse.ArgumentParser()
-parser.add_argument("functions", nargs="+", metavar="FUNC")
-parser.add_argument("--map",         default="expertise_map.json")
-parser.add_argument("--top",         type=int,   default=5)
-parser.add_argument("--mod-weight",  type=float, default=2.0) 
-parser.add_argument("--call-weight", type=float, default=1.0)
-parser.add_argument("--decay-window",     type=float, default=720.0) # number of days until 2/3 of value
-parser.add_argument("--diversity-weight", type=float, default=0.25)
-parser.add_argument("--consistency-weight", type=float, default=10.0)
-parser.add_argument("--simple", action="store_true")
-args = parser.parse_args()
+def doStuff(map, functions, simple, mod_weight, call_weight, decay_window, diversity_weight, consistency_weight, prettyNames):
+    with open(map) as expertiseJSON:
+        expertiseMap = json.load(expertiseJSON)
 
-with open(args.map) as expertiseJSON:
-    expertiseMap = json.load(expertiseJSON)
+    queryFuncs = {normalizeName(funcName) for funcName in functions}
 
-queryFuncs = {normalizeName(funcName) for funcName in args.functions}
+    results = {}
+    for email, changeHistory in expertiseMap.items():
+        if simple:
+            score, expertise = scoreDeveloper(changeHistory,
+            queryFuncs,
+            mod_weight,
+            call_weight, 
+            decay_window, )
+        else: 
+            score, expertise = scoreDeveloperBetter(changeHistory,
+            queryFuncs,
+            mod_weight,
+            call_weight, 
+            decay_window, 
+            diversity_weight, 
+            consistency_weight)
 
-results = {}
-for email, changeHistory in expertiseMap.items():
-    if args.simple:
-        score, expertise = scoreDeveloper(changeHistory,
-        queryFuncs,
-        args.mod_weight,
-        args.call_weight, 
-        args.decay_window, )
-    else: 
-        score, expertise = scoreDeveloperBetter(changeHistory,
-        queryFuncs,
-        args.mod_weight,
-        args.call_weight, 
-        args.decay_window, 
-        args.diversity_weight, 
-        args.consistency_weight)
+        if score > 0:
+            #authorId = userMap['emails'].get(email, "33164598")
+            authorId = userMap['emails'].get(email, email)
+            author   = userMap['accounts'].get(authorId, {}).get('login', email)
+            if not prettyNames:
+                author = authorId
+            
+            if author in results:
+                prevScore, prevExpertise = results[author]
+                for func, detail in expertise.items():
+                    if func in prevExpertise:
+                        prevExpertise[func]['totalHits'] += detail['totalHits']
+                        prevExpertise[func]['modScore']  += detail['modScore']
+                        prevExpertise[func]['callScore'] += detail['callScore']
+                    else:
+                        prevExpertise[func] = detail
+                results[author] = (prevScore + score, prevExpertise)
+            else:
+                results[author] = (score, expertise)
 
-    if score > 0:
-        #authorId = userMap['emails'].get(email, "33164598")
-        authorId = userMap['emails'].get(email, "unknownEmail")
-        author   = userMap['accounts'].get(authorId, {}).get('login', email)
-        
-        if author in results:
-            prevScore, prevExpertise = results[author]
-            for func, detail in expertise.items():
-                if func in prevExpertise:
-                    prevExpertise[func]['totalHits'] += detail['totalHits']
-                    prevExpertise[func]['modScore']  += detail['modScore']
-                    prevExpertise[func]['callScore'] += detail['callScore']
-                else:
-                    prevExpertise[func] = detail
-            results[author] = (prevScore + score, prevExpertise)
-        else:
-            results[author] = (score, expertise)
+    results = sorted(
+        [(author, score, expertise) for author, (score, expertise) in results.items()],
+        key=lambda x: x[1], reverse=True)
+    return results
 
-results = sorted(
-    [(author, score, expertise) for author, (score, expertise) in results.items()],
-    key=lambda x: x[1], reverse=True)
-printResults(results, args.functions, args.top)
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("functions", nargs="+", metavar="FUNC")
+    parser.add_argument("--map",         default="expertise_map.json")
+    parser.add_argument("--top",         type=int,   default=5)
+    parser.add_argument("--mod-weight",  type=float, default=2.0) 
+    parser.add_argument("--call-weight", type=float, default=1.0)
+    parser.add_argument("--decay-window",     type=float, default=720.0) # number of days until 2/3 of value
+    parser.add_argument("--diversity-weight", type=float, default=0.25)
+    parser.add_argument("--consistency-weight", type=float, default=10.0)
+    parser.add_argument("--simple", action="store_true")
+    args = parser.parse_args()
+
+    results = doStuff(args.map, args.functions, args.simple, args.mod_weight, args.call_weight, args.decay_window, args.diversity_weight, args.consistency_weight, True)
+    printResults(results, args.functions, args.top)
