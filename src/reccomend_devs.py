@@ -19,7 +19,7 @@ def getDecay(dateStr, windowDays):
 
 def scoreDeveloper(changeHistory, queryFuncs, modWeight, callWeight, decayWindow):
     totalScore = 0.0
-    expertise = defaultdict(lambda: {'totalHits': 0, 'modScore': 0.0, 'callScore': 0.0})
+    expertise = defaultdict(lambda: {'totalHits': 0, 'modScore': 0.0, 'callScore': 0.0, 'decay' : 0.0})
 
     for log, entry in changeHistory.items():
 
@@ -37,6 +37,7 @@ def scoreDeveloper(changeHistory, queryFuncs, modWeight, callWeight, decayWindow
             expertise[func]['totalHits'] += 1
             expertise[func]['modScore']  += modWeight  * linesChanged * timeDecay
             expertise[func]['callScore'] += callWeight * calls * timeDecay
+            expertise[func]['decay'] += timeDecay
             
             totalScore += (modWeight * linesChanged + callWeight * calls) * timeDecay
 
