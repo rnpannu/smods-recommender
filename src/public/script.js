@@ -2,6 +2,11 @@ const func = document.getElementById("func")
 const out = document.getElementById("out")
 const modWeight = document.getElementById("modWeight")
 const callWeight = document.getElementById("callWeight")
+const advanced = document.getElementById("advanced")
+const decay = document.getElementById("decay")
+const consistencyWeight = document.getElementById("consistencyWeight")
+const diversityWeight = document.getElementById("diversityWeight")
+const advancedStuff = document.getElementById("advancedStuff")
 
 let timeout = 0
 
@@ -12,6 +17,10 @@ async function handleInput() {
 		names,
 		modWeight: modWeight.value,
 		callWeight: callWeight.value,
+		decayWindow: decay.value,
+		simple: !advanced.checked,
+		diversityWeight: diversityWeight.value,
+		consistencyWeight: consistencyWeight.value,
 	}
 	const params = new URLSearchParams(input)
 
@@ -50,5 +59,12 @@ function onInput() {
 func.addEventListener("input", onInput);
 modWeight.addEventListener("input", onInput);
 callWeight.addEventListener("input", onInput);
+decay.addEventListener("input", onInput);
+diversityWeight.addEventListener("input", onInput);
+consistencyWeight.addEventListener("input", onInput);
+advanced.addEventListener("input", () => {
+	advancedStuff.hidden = !advanced.checked;
+	onInput()
+});
 
 console.log(func)
