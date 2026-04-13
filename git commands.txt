@@ -1,8 +1,0 @@
-git log --pretty=format:'"%h","%aN","%aD"' > test.csv
-
-	- Hash, author name, date, 
-
-git diff <hash> 
-	- Shows diff of changes
-	
-git show <hash>:<relative/path/from/git.root.lua
