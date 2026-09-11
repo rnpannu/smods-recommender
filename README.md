@@ -1,5 +1,5 @@
 <h1>Smods-recommender</h1>
-A system to recommend developers for the Steamodded ([SMODS](https://github.com/Steamodded/smods)) project according to their modification history. Mines commits and creates a map of function-level expertise for each developer. 
+A system to recommend developers for bug reports in the Steamodded ([SMODS](https://github.com/Steamodded/smods)) project according to their modification history. Mines commits and creates a map of function-level expertise for each developer. 
 Query using function names and customizable weights for modificiation expertise, call expertise, diversity/breadth of functions addressed, consistency of contributions over time, and a half-life time decay.
   
 <h3>How to use</h3>
